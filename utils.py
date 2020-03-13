@@ -1,7 +1,7 @@
 # Source: https://github.com/mrazavian/ITURPropagPY/blob/18eac5b66b95b868d23a93977872ae9fe6bbaac4/iturpropag/models/iturp1853/scintillation_attenuation_synthesis.py
 
-# import numpy as np
-# from scipy import signal, linalg
+import numpy as np
+from scipy import signal, linalg
 
 def yulewalk(na, ff, aa):
     """
@@ -82,17 +82,17 @@ def yulewalk(na, ff, aa):
     Rwindow = np.append(0.5, np.ones(n2 - 1))
     Rwindow = np.append( Rwindow, np.zeros(n - n2) )
 
-    A = self.polystab( self.denf(R, na) )
+    A = polystab(denf(R, na))
 
     R = R[:nr]
     R[0] = R[0]/2
-    Qh = self.numf(R, A, na)
+    Qh = numf(R, A, na)
 
     _, Ss = 2* np.real(signal.freqz(Qh, A, n , whole=True))
     var1 = np.log( Ss.astype('complex') )
     var2 = np.fft.ifft(var1)
     hh = np.fft.ifft( np.exp( np.fft.fft(Rwindow * var2) ) )
-    B = np.real( self.numf(hh[:nr], A, nb ))
+    B = np.real(numf(hh[:nr], A, nb ))
 
     return B, A
 
@@ -129,7 +129,7 @@ def polystab(a):
         b = np.real(b)
     return b
 
-def numf(self, h, a, nb):
+def numf(h, a, nb):
     """
     Find numerator B given impulse-response h of B/A and denominator a
     Parameters
@@ -155,7 +155,7 @@ def numf(self, h, a, nb):
     b = np.matmul(h, linalg.pinv( linalg.toeplitz(impr, np.append(1.0, np.zeros(nb))).T ) )
     return b
 
-def denf(self, R, na):
+def denf(R, na):
     """
     Compute filter denominator from covariances.
     A = denf(R,na) computes order na denominator A from covariances 
