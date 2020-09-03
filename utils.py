@@ -3,6 +3,7 @@
 import numpy as np
 from scipy import signal, linalg
 
+
 def yulewalk(na, ff, aa):
     """
     YULEWALK Recursive filter design using a least-squares method.
@@ -42,7 +43,7 @@ def yulewalk(na, ff, aa):
     [2] Matlab R2016a `yulewalk` function
     """
     npt = 512
-    lap = np.fix(npt/25)
+    lap = np.fix(npt / 25)
 
     npt = npt + 1
     Ht = np.zeros(npt)
@@ -55,46 +56,47 @@ def yulewalk(na, ff, aa):
     for ii in np.arange(nint):
 
         if df[ii] == 0:
-            nb = int(nb - lap/2)
+            nb = int(nb - lap / 2)
             ne = int(nb + lap)
         else:
-            ne = int(np.fix(ff[ii+1] * npt))
-        
+            ne = int(np.fix(ff[ii + 1] * npt))
+
         jj = np.arange(nb, ne + 1)
         if ne == nb:
             inc = 0
         else:
-            inc = (jj - nb) / (ne - nb); 
-        
-        Ht[nb -1 : ne] = inc * aa[ii + 1] + (1 - inc) * aa[ii]
+            inc = (jj - nb) / (ne - nb);
+
+        Ht[nb - 1: ne] = inc * aa[ii + 1] + (1 - inc) * aa[ii]
         nb = int(ne + 1)
-    
+
     Ht = np.append(Ht, Ht[-2:0:-1])
     n = np.size(Ht)
-    n2 = int(np.fix((n+1) / 2))
+    n2 = int(np.fix((n + 1) / 2))
     nb = na
     nr = 4 * na
     nt = np.arange(nr)
 
-    R = np.real( np.fft.ifft(Ht * Ht) )
-    R = R[:nr] * (0.54 + 0.46 * np.cos(np.pi * nt/(nr-1) ))
+    R = np.real(np.fft.ifft(Ht * Ht))
+    R = R[:nr] * (0.54 + 0.46 * np.cos(np.pi * nt / (nr - 1)))
 
     Rwindow = np.append(0.5, np.ones(n2 - 1))
-    Rwindow = np.append( Rwindow, np.zeros(n - n2) )
+    Rwindow = np.append(Rwindow, np.zeros(n - n2))
 
     A = polystab(denf(R, na))
 
     R = R[:nr]
-    R[0] = R[0]/2
+    R[0] = R[0] / 2
     Qh = numf(R, A, na)
 
-    _, Ss = 2* np.real(signal.freqz(Qh, A, n , whole=True))
-    var1 = np.log( Ss.astype('complex') )
+    _, Ss = 2 * np.real(signal.freqz(Qh, A, n, whole=True))
+    var1 = np.log(Ss.astype('complex'))
     var2 = np.fft.ifft(var1)
-    hh = np.fft.ifft( np.exp( np.fft.fft(Rwindow * var2) ) )
-    B = np.real(numf(hh[:nr], A, nb ))
+    hh = np.fft.ifft(np.exp(np.fft.fft(Rwindow * var2)))
+    B = np.real(numf(hh[:nr], A, nb))
 
     return B, A
+
 
 def polystab(a):
     """
@@ -120,14 +122,15 @@ def polystab(a):
     ## Actual process
     v = np.roots(a)
     ii = np.where(v != 0)[0]
-    vs = 0.5 * (np.sign( np.abs( v[ ii ] ) - 1 ) + 1)
+    vs = 0.5 * (np.sign(np.abs(v[ii]) - 1) + 1)
     v[ii] = (1 - vs) * v[ii] + vs / np.conj(v[ii])
     ind = np.where(a != 0)[0]
-    b =  a[ ind[0] ] * np.poly(v)
+    b = a[ind[0]] * np.poly(v)
     ## Security
     if not (np.any(np.imag(a))):
         b = np.real(b)
     return b
+
 
 def numf(h, a, nb):
     """
@@ -152,8 +155,9 @@ def numf(h, a, nb):
     """
     nh = np.max(np.shape(h))
     impr = signal.lfilter([1.0], a, np.append(1.0, np.zeros(nh - 1)))
-    b = np.matmul(h, linalg.pinv( linalg.toeplitz(impr, np.append(1.0, np.zeros(nb))).T ) )
+    b = np.matmul(h, linalg.pinv(linalg.toeplitz(impr, np.append(1.0, np.zeros(nb))).T))
     return b
+
 
 def denf(R, na):
     """
