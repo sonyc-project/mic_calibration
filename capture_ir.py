@@ -1,18 +1,12 @@
 __author__ = 'Charlie'
 
 import pyaudio
-
 import time
-import wave
 import numpy as np
-import h5py
 from scipy.signal import chirp, freqz, firwin2, lfilter, bilinear_zpk, zpk2tf
-import os
 import utils
-from acoustics.octave import Octave
 import matplotlib.pyplot as plt
 import matplotlib
-from matplotlib.ticker import ScalarFormatter
 from platform import system
 import seaborn as sns
 
@@ -97,15 +91,23 @@ def setup_stream():
                   frames_per_buffer=FRAME_BUF_LEN)
 
 
-def setup_wavfile(fname):
-    wf = wave.open(fname, 'wb')
-    wf.setnchannels(CHANNELS)
-    wf.setframerate(RATE)
-    wf.setsampwidth(BLOCK_SIZE)
-    return wf
+def create_chirp(st_f, en_f, chirp_secs, method='logarithmic', boost_lo_freqs=False):
+    """Create a chirp between frequencies st_f and en_f of duration chirp_secs.
 
+        Parameters
+        ----------
+        method : str, (default is 'logarithmic')
+            'logarithmic' or 'linear' style chirp
+        boost_lo_freqs: bool, (default is False)
+            Boost low frequencies below 500Hz if your reproduction system is a bit weedy
 
-def create_chirp(st_f, en_f, chirp_secs, method):
+        Returns
+        -------
+        array
+            Array of chirp samples at the projects sample rate
+
+        """
+
     global chirp_y
     t = np.arange(0, chirp_secs, 1 / RATE)
     t_f = np.geomspace(0.001, RATE / 2, num=len(t))
@@ -119,7 +121,7 @@ def create_chirp(st_f, en_f, chirp_secs, method):
         lf_window = np.hanning(max_freq_idx * 2)
         lf_window = lf_window[max_freq_idx - 1:-1] + 1.0
         chirp_y[0:max_freq_idx] = chirp_y[0:max_freq_idx] * lf_window
-        in_chirp_wav = setup_wavfile('in_chirp.wav')
+        in_chirp_wav = utils.setup_wavfile('in_chirp.wav', CHANNELS, RATE, BLOCK_SIZE)
         in_chirp_wav.writeframes(chirp_y)
         in_chirp_wav.close()
     else:
@@ -127,69 +129,6 @@ def create_chirp(st_f, en_f, chirp_secs, method):
                 chirp(t, st_f, chirp_secs, en_f, method=method, phi=90) * ((2 ** BIT_RATE) // 2)).astype(
             np.int16)
     return chirp_y
-
-
-def ft_wavfile(wave_fname):
-    wf = wave.open(wave_fname, 'r')
-    wav_bytes = wf.readframes(wf.getnframes())
-    y = np.frombuffer(wav_bytes, np.int16) / ((2 ** BIT_RATE) // 2)
-
-    # plt.plot(y)
-    # plt.show()
-    # plt.close()
-    nfft = len(y)
-    X = np.fft.rfft(y, n=nfft)
-    mag_spec_lin = [np.sqrt(i.real ** 2 + i.imag ** 2) / len(X) for i in X]
-    freq_arr = np.linspace(0, RATE / 2, num=len(mag_spec_lin))
-    mag_spec_avg, freqs_avg = octsmooth(mag_spec_lin, freq_arr, octave_smooth)
-    return mag_spec_avg, freqs_avg, mag_spec_lin, freq_arr
-
-
-def plot_resp(mag_spec_oct, freqs_oct, linestyle, legend_label, plot_in_db=True, meas_type='', xlim=[0, 0], log_x=True):
-    if log_x:
-        if plot_in_db:
-            plt.semilogx(freqs_oct, 20 * np.log10(mag_spec_oct), linestyle, label=legend_label)
-        else:
-            plt.semilogx(freqs_oct, mag_spec_oct, linestyle, label=legend_label)
-    else:
-        if plot_in_db:
-            plt.plot(freqs_oct, 20 * np.log10(mag_spec_oct), linestyle, label=legend_label)
-        else:
-            plt.plot(freqs_oct, mag_spec_oct, linestyle, label=legend_label)
-    # cax = plt.gca().xaxis
-    # cax.set_major_formatter(ScalarFormatter())
-    # cay = plt.gca().yaxis
-    # cay.set_major_formatter(ScalarFormatter())
-
-    plt.xlim(xlim)
-    plt.title('Frequency response of %s' % meas_type)
-    plt.xlabel('Frequency (Hz)')
-    plt.ylabel('Amplitude (dB)')
-    plt.tight_layout()
-
-
-def octsmooth(amps, freq_vals, noct):
-    o = Octave(fmin=st_freq, fmax=en_freq, fraction=noct)
-    octbins = np.zeros(len(o.center))
-    for i in range(0, len(o.center)):
-        st = (np.abs(freq_vals - o.lower[i])).argmin()
-        en = (np.abs(freq_vals - o.upper[i])).argmin()
-        if en - st > 0:
-            octbinvec = amps[st:en]
-        else:
-            octbinvec = amps[st:en + 1]
-        octbins[i] = np.max(octbinvec)
-    return octbins, o.center
-
-
-def avg_resp(mag_mat):
-    return np.median(np.asarray(mag_mat), axis=0)
-
-
-def save_resp(fname, data):
-    hf = h5py.File(fname, 'w')
-    hf.create_dataset('mag_spec_avg', data=data)
-    hf.close()
 
 
 def measurement_cycle(meas_type, cycle, recreate_using_new_capture):
@@ -201,8 +140,8 @@ def measurement_cycle(meas_type, cycle, recreate_using_new_capture):
         if recreate_using_new_capture:
             stream = setup_stream()
 
-            wav_file = setup_wavfile(wav_fname)
-            create_chirp(st_freq, en_freq, sweep_secs, 'logarithmic')
+            wav_file = utils.setup_wavfile(wav_fname, CHANNELS, RATE, BLOCK_SIZE)
+            create_chirp(st_freq, en_freq, sweep_secs, method='logarithmic')
 
             samp_idx = 0
             stream.start_stream()
@@ -218,70 +157,30 @@ def measurement_cycle(meas_type, cycle, recreate_using_new_capture):
         else:
             wav_fname = 'audio/43434_simul.wav'
 
-    mag_spec_y, freq_array, mag_spec_full, freqs_full = ft_wavfile(wav_fname)
+    mag_spec_y, freq_array, mag_spec_full, freqs_full = utils.ft_wavfile(wav_fname)
 
     mag_spec_mat.append(mag_spec_y)
 
     # line_label = 'Cycle %i' % cycle
     # plot_resp(mag_spec_y, freq_array, '-', line_label, meas_type=meas_type, plot_in_db=True, xlim=[st_freq, en_freq])
 
-    avg_mag_spec = avg_resp(mag_spec_mat)
+    avg_mag_spec = utils.avg_resp(mag_spec_mat)
 
-    save_resp('%s_resp.h5' % meas_type, [avg_mag_spec, freq_array])
+    utils.save_resp('%s_resp.h5' % meas_type, [avg_mag_spec, freq_array])
 
     print('\tCompleted capture of %s' % wav_fname)
 
     return mag_spec_mat, freq_array
 
 
-def align_resps(ref_mags, dut_mags, f_arr):
-    align_freq = 1000
-    freq_idx = np.abs(f_arr - align_freq).argmin()
-    return ref_mags - ref_mags[freq_idx], dut_mags - dut_mags[freq_idx]
-
-
-def sub_resps(ref_mags, dut_mags, f_arr):
-    diff_mags = ref_mags - dut_mags
-    align_freq = 1000
-    freq_idx = np.abs(f_arr - align_freq).argmin()
-    return diff_mags - diff_mags[freq_idx]
-
-
-def cleanup_desired_filter_gain(orig_filt_gains, orig_filt_freqs, freq_range='low'):
-
-    orig_filt_freqs[0] = 0
-
-    if RATE / 2 > orig_filt_freqs[-1]:
-        orig_filt_freqs = np.append(orig_filt_freqs, RATE / 2)
-        orig_filt_gains = np.append(orig_filt_gains, orig_filt_gains[-1])
-
-    if RATE / 2 < orig_filt_freqs[-1]:
-        orig_filt_freqs[-1] = RATE / 2
-
-    mid_align_freq = 1000
-    mid_freq_idx = np.abs(orig_filt_freqs - mid_align_freq).argmin()
-
-    if freq_range == 'high':
-        orig_filt_gains[0:mid_freq_idx] = orig_filt_gains[mid_freq_idx]
-    elif freq_range == 'low':
-        orig_filt_gains[mid_freq_idx:-1] = orig_filt_gains[mid_freq_idx]
-        orig_filt_gains[-1] = orig_filt_gains[mid_freq_idx]
-
-    lo_align_freq = 40
-    lo_freq_idx = np.abs(orig_filt_freqs - lo_align_freq).argmin()
-    orig_filt_gains[0:lo_freq_idx] = orig_filt_gains[lo_freq_idx]
-
-    return orig_filt_gains, orig_filt_freqs
-
-
 # TODO: CHANGE TO 3
 cycle_cnt = 3
-octave_smooth = 3
+octave_smooth = 24
 
 # Should be at least 10s
 sweep_secs = 10
 
-st_freq = 1
+st_freq = 20
 en_freq = RATE // 2
 
 mag_spec_mat = []
@@ -301,7 +200,7 @@ for x in range(1, cycle_cnt + 1):
     mag_spec_avg_ref, freqs = measurement_cycle('ref', x, recreate_ref)
 p.terminate()
 
-mag_spec_avg_ref = avg_resp(mag_spec_avg_ref)
+mag_spec_avg_ref = utils.avg_resp(mag_spec_avg_ref)
 
 # plot_resp(mag_spec_avg_ref, freqs, '--', 'Median', meas_type='ref', plot_in_db=True, xlim=[st_freq, en_freq])
 # plt.legend()
@@ -333,7 +232,7 @@ for x in range(1, cycle_cnt + 1):
 
 p.terminate()
 
-mag_spec_avg_dut = avg_resp(mag_spec_avg_dut)
+mag_spec_avg_dut = utils.avg_resp(mag_spec_avg_dut)
 # else:
 #     with h5py.File(dut_resp_fname, 'r') as f:
 #         mag_spec_avg_dut = f['mag_spec_avg'][()][0]
@@ -344,22 +243,24 @@ mag_spec_avg_dut_db = 20 * np.log10(mag_spec_avg_dut)
 
 # mag_spec_avg_ref_db, mag_spec_avg_dut_db = align_resps(mag_spec_avg_ref_db, mag_spec_avg_dut_db, freqs)
 
-plot_resp(mag_spec_avg_ref_db, freqs, '-', 'Reference', meas_type='Ref resp', plot_in_db=False, xlim=[st_freq, en_freq], log_x=True)
-plot_resp(mag_spec_avg_dut_db, freqs, '-', 'DUT', meas_type='Dut resp', plot_in_db=False, xlim=[st_freq, en_freq], log_x=True)
+utils.plot_resp(mag_spec_avg_ref_db, freqs, '-', 'Reference', meas_type='Ref resp', plot_in_db=False, xlim=[st_freq, en_freq], log_x=True)
+utils.plot_resp(mag_spec_avg_dut_db, freqs, '-', 'DUT', meas_type='Dut resp', plot_in_db=False, xlim=[st_freq, en_freq], log_x=True)
 plt.legend()
 plt.show()
 
 # diff_resp = sub_resps(mag_spec_avg_ref_db, mag_spec_avg_dut_db, freqs)
 diff_resp = mag_spec_avg_ref_db - mag_spec_avg_dut_db
 
-plot_resp(diff_resp, freqs, '-', 'Diffs', meas_type='diff', plot_in_db=False, xlim=[st_freq, en_freq], log_x=True)
+utils.plot_resp(diff_resp, freqs, '-', 'Diffs', meas_type='diff', plot_in_db=False, xlim=[st_freq, en_freq], log_x=True)
 plt.legend()
 plt.show()
+
 exit()
+
+
+
 filt_gains_linear = 10**(diff_resp/20)
 
-st_freq = -10
-en_freq = 1000
 st_freq = 1
 en_freq = RATE // 2
 
@@ -367,7 +268,7 @@ plot_log = True
 
 freq_filt_str = 'none'
 
-filt_gains_clean, filt_gains_freq = cleanup_desired_filter_gain(filt_gains_linear.copy(), freqs.copy(), freq_range=freq_filt_str)
+filt_gains_clean, filt_gains_freq = utils.cleanup_desired_filter_gain(filt_gains_linear.copy(), freqs.copy(), freq_range=freq_filt_str)
 
 # plot_resp(filt_gains_linear, freqs, '-', 'Filter gain', meas_type='filter gains', plot_in_db=True, xlim=[st_freq, en_freq], log_x=plot_log)
 # plot_resp(filt_gains_clean, filt_gains_freq, '-', 'Cleaned filter gain', meas_type='diff', plot_in_db=True, xlim=[st_freq, en_freq], log_x=plot_log)
@@ -396,19 +297,19 @@ nfft = len(out_data)
 X = np.fft.rfft(out_data, n=nfft)
 mag_spec_lin = [np.sqrt(i.real ** 2 + i.imag ** 2) / len(X) for i in X]
 freq_arr = np.linspace(0, RATE / 2, num=len(mag_spec_lin))
-mag_spec_avg, freqs_avg = octsmooth(mag_spec_lin, freq_arr, octave_smooth)
+mag_spec_avg, freqs_avg = utils.octsmooth(mag_spec_lin, freq_arr, octave_smooth)
 
 plt.semilogx(freq_arr, 20*np.log10(mag_spec_lin))
 plt.show()
 
-plot_resp(abs(h), w_hz, '-', '%i tap FIR filter' % numtaps_fir, meas_type='IIR/gain filter response', plot_in_db=True, xlim=[st_freq, en_freq], log_x=plot_log)
+utils.plot_resp(abs(h), w_hz, '-', '%i tap FIR filter' % numtaps_fir, meas_type='IIR/gain filter response', plot_in_db=True, xlim=[st_freq, en_freq], log_x=plot_log)
 
 numtaps_iir = 55
 b, a = utils.yulewalk(numtaps_iir, filt_gains_freq / np.max(filt_gains_freq), filt_gains_clean)
 w, h = freqz(b, a, worN=32768)
 w_hz = w / max(w) * RATE / 2
 
-plot_resp(abs(h), w_hz, '-', '%i tap IIR filter' % numtaps_iir, meas_type='IIR/gain filter response', plot_in_db=True, xlim=[st_freq, en_freq], log_x=plot_log)
+utils.plot_resp(abs(h), w_hz, '-', '%i tap IIR filter' % numtaps_iir, meas_type='IIR/gain filter response', plot_in_db=True, xlim=[st_freq, en_freq], log_x=plot_log)
 plt.legend()
 # plt.ylim([-2, 10])
 plt.savefig('plot_%s_iir-%i_fir-%i.png' % (freq_filt_str, numtaps_iir, numtaps_fir))
@@ -429,5 +330,5 @@ for tap in a:
 w, h = freqz(b, a, worN=32768)
 w_hz = w / max(w) * RATE / 2
 
-plot_resp(abs(h), w_hz, '-', '%i tap A weighting IIR filter' % numtaps_iir, meas_type='IIR/gain filter response', plot_in_db=True, xlim=[st_freq, en_freq], log_x=plot_log)
+utils.plot_resp(abs(h), w_hz, '-', '%i tap A weighting IIR filter' % numtaps_iir, meas_type='IIR/gain filter response', plot_in_db=True, xlim=[st_freq, en_freq], log_x=plot_log)
 plt.show()

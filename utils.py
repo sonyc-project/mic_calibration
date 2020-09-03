@@ -2,6 +2,321 @@
 
 import numpy as np
 from scipy import signal, linalg
+import h5py
+import wave
+from acoustics.octave import Octave
+import matplotlib.pyplot as plt
+
+
+def setup_wavfile(fname, ch_num=1, fs=44100, bs=2):
+    """Setup wave file for writing with global parameters for CHANNELS, RATE and BLOCK_SIZE.
+
+    Args
+    ----------
+    fname : str
+        The filename of the output wave file
+
+    Parameters
+    ----------
+    ch_num : int
+        Number of channels (default is 1)
+
+    fs : int
+        Sample rate in Hz (default is 44100)
+
+    bs : int
+        Block size (default is 2)
+
+    Returns
+    -------
+    Wave_write
+        A file like object to write bytes to a wave file
+
+    """
+
+    wf = wave.open(fname, 'wb')
+    wf.setnchannels(ch_num)
+    wf.setframerate(fs)
+    wf.setsampwidth(bs)
+    return wf
+
+
+def ft_wavfile(wave_fname, fs=44100, br=16, octave_smooth=24):
+    """DFT a wave file.
+
+    Args
+    ----------
+    wave_fname : str
+        Path to wave file
+
+    Parameters
+    ----------
+    ch_num : int
+        Number of channels (default is 1)
+
+    fs : int
+        Sample rate in Hz (default is 44100)
+
+    br : int
+        Bit rate (default is 16)
+
+    octave_smooth : int
+        Octave smoothing amount (default is 24)
+
+    Returns
+    -------
+    array
+        Octave smoothed magnitude spectrum array
+    array
+        Frequency values for each magnitude spectrum value
+    array
+        Non octave smoothed agnitude spectrum values
+    array
+        Non octave smoothed frequency values for each magnitude spectrum value
+
+    """
+    wf = wave.open(wave_fname, 'r')
+    wav_bytes = wf.readframes(wf.getnframes())
+    y = np.frombuffer(wav_bytes, np.int16) / ((2 ** br) // 2)
+
+    nfft = len(y)
+    X = np.fft.rfft(y, n=nfft)
+    mag_spec_lin = [np.sqrt(i.real ** 2 + i.imag ** 2) / len(X) for i in X]
+    freq_arr = np.linspace(0, fs / 2, num=len(mag_spec_lin))
+    mag_spec_avg, freqs_avg = octsmooth(mag_spec_lin, freq_arr, octave_smooth)
+    return mag_spec_avg, freqs_avg, mag_spec_lin, freq_arr
+
+
+def plot_resp(mag_spec_oct, freqs_oct, linestyle='-', legend_label='', plot_in_db=True, meas_type='', xlim=[20, 20000], log_x=True):
+    """Plot frequency response.
+
+        Args
+        ----------
+        mag_spec_oct : array
+            Magnitude spectrum values
+
+        freqs_oct : array
+            Magnitude spectrum frequency values
+
+        Parameters
+        ----------
+        linestyle : str, optional
+            Plot linestyle (default is '-')
+
+        legend_label : str, optional
+            Line legend label (default is '')
+
+        plot_in_db : bool, optional
+            Plot the response in decibels (default is True)
+
+        meas_type : str, optional
+            String to add to title to identify type of plot (usually 'diff' or 'ref')
+
+        xlim : array
+            X axis limits in the form [num, num] (default is [0, 0])
+
+        log_x : bool, optional
+            Logarithmic X axis (default is True)
+
+        """
+    if log_x:
+        if plot_in_db:
+            plt.semilogx(freqs_oct, 20 * np.log10(mag_spec_oct), linestyle, label=legend_label)
+        else:
+            plt.semilogx(freqs_oct, mag_spec_oct, linestyle, label=legend_label)
+    else:
+        if plot_in_db:
+            plt.plot(freqs_oct, 20 * np.log10(mag_spec_oct), linestyle, label=legend_label)
+        else:
+            plt.plot(freqs_oct, mag_spec_oct, linestyle, label=legend_label)
+
+    plt.xlim(xlim)
+    plt.title('Frequency response of %s' % meas_type)
+    plt.xlabel('Frequency (Hz)')
+    plt.ylabel('Amplitude (dB)')
+    plt.tight_layout()
+
+
+def octsmooth(amps, freq_vals, noct=24, st_freq=20, en_freq=20000):
+    """Plot frequency response.
+
+    Args
+    ----------
+    amps : array
+        Magnitude spectrum values for smoothing
+
+    freq_vals : array
+        Magnitude spectrum frequency values
+
+    Parameters
+    ----------
+    noct : int, optional
+        Number of octaves to smooth over (default is 24)
+
+    st_freq : int, optional
+        Start frequency for octave bands (default is 20)
+
+    en_freq : int, optional
+        End frequency for octave bands (default is 20000)
+
+    Returns
+    -------
+    array
+        Octave smoothed magnitude spectrum array
+    array
+        Octave smoothed magnitude spectrum array frequency bins
+            """
+    o = Octave(fmin=st_freq, fmax=en_freq, fraction=noct)
+    octbins = np.zeros(len(o.center))
+    for i in range(0, len(o.center)):
+        st = (np.abs(freq_vals - o.lower[i])).argmin()
+        en = (np.abs(freq_vals - o.upper[i])).argmin()
+        if en - st > 0:
+            octbinvec = amps[st:en]
+        else:
+            octbinvec = amps[st:en + 1]
+        octbins[i] = np.max(octbinvec)
+    return octbins, o.center
+
+
+def avg_resp(mag_mat):
+    """Average response using a median across multiple responses in matrix.
+    Median is used to reduce the impact of an especially weird and noisy measurement
+    that could swing your average out.
+
+    Args
+    ----------
+    mag_mat: mat
+        N Magnitude spectrum values in matrix
+
+    Returns
+    -------
+    array
+        Median averaged array
+    """
+    return np.median(np.asarray(mag_mat), axis=0)
+
+
+def save_resp(fname, data):
+    """Save averaged response to H5 file.
+
+    Args
+    ----------
+    fname: str
+        Filename of output H5 file
+
+    data: array
+        Averaged magnitude spectrum data
+
+    """
+    hf = h5py.File(fname, 'w')
+    hf.create_dataset('mag_spec_avg', data=data)
+    hf.close()
+
+
+def align_resps(ref_mags, dut_mags, f_arr, align_freq=1000):
+    """Shift reference and DUT responses to meet at a given frequency.
+
+    Args
+    ----------
+    ref_mags: array
+        Magnitude spectrum values of reference device
+
+    dut_mags: array
+        Magnitude spectrum values of device under test (DUT)
+
+    f_arr: array
+        Frequency array for magnitude values
+
+    Parameters
+    ----------
+    align_freq : int, optional
+        Alignment frequency (default is 1000)
+
+    Returns
+    -------
+    array
+        Aligned responses
+    """
+
+    freq_idx = np.abs(f_arr - align_freq).argmin()
+    return ref_mags - ref_mags[freq_idx], dut_mags - dut_mags[freq_idx]
+
+
+def sub_resps(ref_mags, dut_mags, f_arr, align_freq=1000):
+    """Subtract responses, performing alignment to given frequency.
+
+    Args
+    ----------
+    ref_mags: array
+        Magnitude spectrum values of reference device
+
+    dut_mags: array
+        Magnitude spectrum values of device under test (DUT)
+
+    f_arr: array
+        Frequency array for magnitude values
+
+    Parameters
+    ----------
+    align_freq : int, optional
+        Alignment frequency (default is 1000)
+
+    Returns
+    -------
+    array
+        Aligned responses
+    """
+    diff_mags = ref_mags - dut_mags
+    freq_idx = np.abs(f_arr - align_freq).argmin()
+    return diff_mags - diff_mags[freq_idx]
+
+
+def cleanup_desired_filter_gain(orig_filt_gains=[], orig_filt_freqs=[], lo_align_freq=40, freq_range='low', fs=44100):
+    """Cleans up a filter gain array at the low frequency range by levelling out low
+    frequencies below a given frequency to help in filter design by removing
+    extreme gain shifts.
+
+    Parameters
+    ----------
+    orig_filt_gains : array
+        The original filter gains to be cleaned (default is [])
+
+    orig_filt_freqs : array
+        The original filter gain's frequency bins (default is [])
+
+    lo_align_freq : int, optional
+        Low frequency to end leveling at (default is 40)
+
+    freq_range: str, optional
+        If 'high' is passed this will level out all gains below 1000Hz (default is 'low')
+
+    fs: int, optional
+        Sample rate in Hz (default is 44100)
+    """
+
+    orig_filt_freqs[0] = 0
+
+    if fs / 2 > orig_filt_freqs[-1]:
+        orig_filt_freqs = np.append(orig_filt_freqs, fs / 2)
+        orig_filt_gains = np.append(orig_filt_gains, orig_filt_gains[-1])
+
+    if fs / 2 < orig_filt_freqs[-1]:
+        orig_filt_freqs[-1] = fs / 2
+
+    mid_align_freq = 1000
+    mid_freq_idx = np.abs(orig_filt_freqs - mid_align_freq).argmin()
+
+    if freq_range == 'high':
+        orig_filt_gains[0:mid_freq_idx] = orig_filt_gains[mid_freq_idx]
+    elif freq_range == 'low':
+        orig_filt_gains[mid_freq_idx:-1] = orig_filt_gains[mid_freq_idx]
+        orig_filt_gains[-1] = orig_filt_gains[mid_freq_idx]
+
+    lo_freq_idx = np.abs(orig_filt_freqs - lo_align_freq).argmin()
+    orig_filt_gains[0:lo_freq_idx] = orig_filt_gains[lo_freq_idx]
+
+    return orig_filt_gains, orig_filt_freqs
 
 
 def yulewalk(na, ff, aa):
