@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 
 def setup_wavfile(fname, ch_num=1, fs=44100, bs=2):
-    """Setup wave file for writing with global parameters for CHANNELS, RATE and BLOCK_SIZE.
+    """Setup wave file for writing.
 
     Args
     ----------
