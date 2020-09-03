@@ -136,7 +136,7 @@ def plot_resp(mag_spec_oct, freqs_oct, linestyle='-', legend_label='', plot_in_d
 
 
 def octsmooth(amps, freq_vals, noct=24, st_freq=20, en_freq=20000):
-    """Plot frequency response.
+    """Smooth magnitude spectrum values using octave bands for easier subtractions and viz.
 
     Args
     ----------
@@ -316,7 +316,9 @@ def cleanup_desired_filter_gain(orig_filt_gains=[], orig_filt_freqs=[], lo_align
 
     return orig_filt_gains, orig_filt_freqs
 
+
 # Source: https://github.com/mrazavian/ITURPropagPY/blob/18eac5b66b95b868d23a93977872ae9fe6bbaac4/iturpropag/models/iturp1853/scintillation_attenuation_synthesis.py
+
 
 def yulewalk(na, ff, aa):
     """
