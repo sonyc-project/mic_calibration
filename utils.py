@@ -1,5 +1,3 @@
-# Source: https://github.com/mrazavian/ITURPropagPY/blob/18eac5b66b95b868d23a93977872ae9fe6bbaac4/iturpropag/models/iturp1853/scintillation_attenuation_synthesis.py
-
 import numpy as np
 from scipy import signal, linalg
 import h5py
@@ -318,6 +316,7 @@ def cleanup_desired_filter_gain(orig_filt_gains=[], orig_filt_freqs=[], lo_align
 
     return orig_filt_gains, orig_filt_freqs
 
+# Source: https://github.com/mrazavian/ITURPropagPY/blob/18eac5b66b95b868d23a93977872ae9fe6bbaac4/iturpropag/models/iturp1853/scintillation_attenuation_synthesis.py
 
 def yulewalk(na, ff, aa):
     """
