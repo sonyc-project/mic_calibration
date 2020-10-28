@@ -15,14 +15,14 @@ matplotlib.rcParams['figure.figsize'] = (20.0, 8.0)
 matplotlib.rcParams['axes.formatter.useoffset'] = False
 
 CHANNELS = 1
-RATE = 48000
+RATE = 32000
 
 # Locked at 16bits for now
 BIT_RATE = 16
 FRAME_BUF_LEN = 1024
 BLOCK_SIZE = (BIT_RATE // 8) * CHANNELS
 
-use_debug_files = False
+use_debug_files = True
 
 p = pyaudio.PyAudio()
 info = p.get_host_api_info_by_index(0)
@@ -157,7 +157,7 @@ def measurement_cycle(meas_type, cycle, recreate_using_new_capture):
         else:
             wav_fname = 'audio/43434_simul.wav'
 
-    mag_spec_y, freq_array, mag_spec_full, freqs_full = utils.ft_wavfile(wav_fname)
+    mag_spec_y, freq_array, mag_spec_full, freqs_full = utils.ft_wavfile(wav_fname, fs=RATE)
 
     mag_spec_mat.append(mag_spec_y)
 
@@ -255,7 +255,6 @@ utils.plot_resp(diff_resp, freqs, '-', 'Diffs', meas_type='diff', plot_in_db=Fal
 plt.legend()
 plt.show()
 
-exit()
 
 
 
@@ -268,7 +267,7 @@ plot_log = True
 
 freq_filt_str = 'none'
 
-filt_gains_clean, filt_gains_freq = utils.cleanup_desired_filter_gain(filt_gains_linear.copy(), freqs.copy(), freq_range=freq_filt_str)
+filt_gains_clean, filt_gains_freq = utils.cleanup_desired_filter_gain(filt_gains_linear.copy(), freqs.copy(), freq_range=freq_filt_str, fs=RATE)
 
 # plot_resp(filt_gains_linear, freqs, '-', 'Filter gain', meas_type='filter gains', plot_in_db=True, xlim=[st_freq, en_freq], log_x=plot_log)
 # plot_resp(filt_gains_clean, filt_gains_freq, '-', 'Cleaned filter gain', meas_type='diff', plot_in_db=True, xlim=[st_freq, en_freq], log_x=plot_log)

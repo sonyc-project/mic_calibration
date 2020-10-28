@@ -4,6 +4,7 @@ import h5py
 import wave
 from acoustics.octave import Octave
 import matplotlib.pyplot as plt
+import librosa as lb
 
 
 def setup_wavfile(fname, ch_num=1, fs=44100, bs=2):
@@ -73,15 +74,16 @@ def ft_wavfile(wave_fname, fs=44100, br=16, octave_smooth=24):
         Non octave smoothed frequency values for each magnitude spectrum value
 
     """
-    wf = wave.open(wave_fname, 'r')
-    wav_bytes = wf.readframes(wf.getnframes())
-    y = np.frombuffer(wav_bytes, np.int16) / ((2 ** br) // 2)
+    y, sr = lb.load(wave_fname, sr=fs)
+    # wf = wave.open(wave_fname, 'r')
+    # wav_bytes = wf.readframes(wf.getnframes())
+    # y = np.frombuffer(wav_bytes, np.int16) / ((2 ** br) // 2)
 
     nfft = len(y)
     X = np.fft.rfft(y, n=nfft)
     mag_spec_lin = [np.sqrt(i.real ** 2 + i.imag ** 2) / len(X) for i in X]
     freq_arr = np.linspace(0, fs / 2, num=len(mag_spec_lin))
-    mag_spec_avg, freqs_avg = octsmooth(mag_spec_lin, freq_arr, octave_smooth)
+    mag_spec_avg, freqs_avg = octsmooth(mag_spec_lin, freq_arr, noct=octave_smooth, st_freq=20, en_freq=fs/2)
     return mag_spec_avg, freqs_avg, mag_spec_lin, freq_arr
 
 
