@@ -257,7 +257,6 @@ plt.show()
 
 
 
-
 filt_gains_linear = 10**(diff_resp/20)
 
 st_freq = 1
@@ -272,16 +271,16 @@ filt_gains_clean, filt_gains_freq = utils.cleanup_desired_filter_gain(filt_gains
 # plot_resp(filt_gains_linear, freqs, '-', 'Filter gain', meas_type='filter gains', plot_in_db=True, xlim=[st_freq, en_freq], log_x=plot_log)
 # plot_resp(filt_gains_clean, filt_gains_freq, '-', 'Cleaned filter gain', meas_type='diff', plot_in_db=True, xlim=[st_freq, en_freq], log_x=plot_log)
 
-numtaps_fir = 1025
+numtaps_fir = 769
 taps = firwin2(numtaps_fir, filt_gains_freq, filt_gains_clean, fs=RATE)
 for tap in taps:
-    print('{:10.24f}'.format(tap))
+    print('{:10.12f}'.format(tap))
 w, h = freqz(taps, 1.0, worN=32768)
 w_hz = w / max(w) * RATE / 2
 
 with open('filt_taps_fir.txt', 'w') as out_file:
     for tap in taps:
-        out_file.write('{:10.64f}'.format(tap))
+        out_file.write('{:10.12f}'.format(tap))
         out_file.write('\n')
 
 
@@ -303,16 +302,18 @@ plt.show()
 
 utils.plot_resp(abs(h), w_hz, '-', '%i tap FIR filter' % numtaps_fir, meas_type='IIR/gain filter response', plot_in_db=True, xlim=[st_freq, en_freq], log_x=plot_log)
 
-numtaps_iir = 55
-b, a = utils.yulewalk(numtaps_iir, filt_gains_freq / np.max(filt_gains_freq), filt_gains_clean)
-w, h = freqz(b, a, worN=32768)
-w_hz = w / max(w) * RATE / 2
+exit()
 
-utils.plot_resp(abs(h), w_hz, '-', '%i tap IIR filter' % numtaps_iir, meas_type='IIR/gain filter response', plot_in_db=True, xlim=[st_freq, en_freq], log_x=plot_log)
-plt.legend()
-# plt.ylim([-2, 10])
-plt.savefig('plot_%s_iir-%i_fir-%i.png' % (freq_filt_str, numtaps_iir, numtaps_fir))
-plt.show()
+# numtaps_iir = 55
+# b, a = utils.yulewalk(numtaps_iir, filt_gains_freq / np.max(filt_gains_freq), filt_gains_clean)
+# w, h = freqz(b, a, worN=32768)
+# w_hz = w / max(w) * RATE / 2
+#
+# utils.plot_resp(abs(h), w_hz, '-', '%i tap IIR filter' % numtaps_iir, meas_type='IIR/gain filter response', plot_in_db=True, xlim=[st_freq, en_freq], log_x=plot_log)
+# plt.legend()
+# # plt.ylim([-2, 10])
+# plt.savefig('plot_%s_iir-%i_fir-%i.png' % (freq_filt_str, numtaps_iir, numtaps_fir))
+# plt.show()
 
 
 z, p, k = bilinear_zpk([0.0, 0.0, 0.0, 0.0], [-129.4, -129.4, -676.7, -4636.0, -76655.0, -76655.0], 7.39705E9, RATE)
@@ -329,5 +330,5 @@ for tap in a:
 w, h = freqz(b, a, worN=32768)
 w_hz = w / max(w) * RATE / 2
 
-utils.plot_resp(abs(h), w_hz, '-', '%i tap A weighting IIR filter' % numtaps_iir, meas_type='IIR/gain filter response', plot_in_db=True, xlim=[st_freq, en_freq], log_x=plot_log)
+utils.plot_resp(abs(h), w_hz, '-', '%i tap A weighting IIR filter' % len(a), meas_type='IIR/gain filter response', plot_in_db=True, xlim=[st_freq, en_freq], log_x=plot_log)
 plt.show()
