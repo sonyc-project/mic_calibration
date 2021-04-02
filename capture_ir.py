@@ -15,7 +15,7 @@ matplotlib.rcParams['figure.figsize'] = (20.0, 8.0)
 matplotlib.rcParams['axes.formatter.useoffset'] = False
 
 CHANNELS = 1
-RATE = 32000
+RATE = 44100
 
 # Locked at 16bits for now
 BIT_RATE = 16
@@ -254,7 +254,6 @@ diff_resp = mag_spec_avg_ref_db - mag_spec_avg_dut_db
 utils.plot_resp(diff_resp, freqs, '-', 'Diffs', meas_type='diff', plot_in_db=False, xlim=[st_freq, en_freq], log_x=True)
 plt.legend()
 plt.show()
-
 
 
 filt_gains_linear = 10**(diff_resp/20)
